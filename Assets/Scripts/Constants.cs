@@ -6,6 +6,7 @@ using UnityEngine;
 public static class Constants 
 {
     public static int pixelsPerUnit = 64;
+    public static int minPixels = 15;
     public static readonly int2[] nLookup = new int2[4]
     {
         new int2(1,0),

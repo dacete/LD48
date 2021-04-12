@@ -24,7 +24,9 @@ public class DestructableObject : MonoBehaviour
     public void SetTexture(Texture2D tex)
     {
         size = tex.width;
+        print(tex.width);
         renderer.sprite = Sprite.Create(tex, new Rect(0.0f, 0.0f, tex.width, tex.height), new Vector2(0.0f, 0.0f), Constants.pixelsPerUnit, 0, SpriteMeshType.FullRect);
+        print("Set texture: " + name);
     }
 
 
