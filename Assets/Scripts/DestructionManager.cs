@@ -15,9 +15,14 @@ public class DestructionManager : MonoBehaviour
     Vector3 firstPos;
     DestructablePool destructablePool;
     bool cutting;
+    public List<DestructableObject> objects;
+    public float bombRadious;
+    public float bombPower;
+    public LayerMask destructableOnlyLayerMask;
     // Start is called before the first frame update
     void Start()
     {
+        objects = new List<DestructableObject>();
         destructablePool = FindObjectOfType<DestructablePool>();
         texture = Instantiate(Resources.Load("Texture")) as Texture2D;
     }
@@ -25,39 +30,72 @@ public class DestructionManager : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
-
         if (Input.GetMouseButtonDown(0))
         {
-            firstPos = cam.ScreenToWorldPoint(Input.mousePosition);
-            cutting = true;
-        }
-        if (cutting && Input.GetMouseButtonUp(0))
-        {
-            cutting = false;
-            var endPos = cam.ScreenToWorldPoint(Input.mousePosition);
-            var dest = destructablePool.Get();
-            if (dest != null)
+            var stopwatch = new System.Diagnostics.Stopwatch();
+            stopwatch.Start();
+
+
+
+            var pos = cam.ScreenToWorldPoint(Input.mousePosition);
+            var cols = Physics2D.OverlapCircleAll(pos, bombRadious, destructableOnlyLayerMask);
+            if (cols.Length != 0)
             {
-                dest.SetTexture( Instantiate(Resources.Load("Texture")as Texture2D ));
-                endPos = dest.transform.InverseTransformPoint(endPos);
-                firstPos = dest.transform.InverseTransformPoint(firstPos);
-                var job = new CutImageJob()
+                for (int i = 0; i < cols.Length; i++)
                 {
-                    image = dest.renderer.sprite.texture.GetRawTextureData<Color32>(),
-                    endPos = new float2(endPos.x, endPos.y),
-                    startPos = new float2(firstPos.x, firstPos.y),
-                    size = dest.size,
-                    pixelsPerUnit = Constants.pixelsPerUnit
-                };
-                job.Schedule(job.image.Length, 64).Complete();
-                var texture = dest.renderer.sprite.texture;
-                texture.Apply();
-                dest.SetTexture(texture);
-                print(firstPos);
-                print(endPos);
-                destructablePool.Release(dest);
+                    print("one");
+                    var col = cols[i];
+                    var dest = col.gameObject.GetComponent<DestructableObject>();
+                    var localPos = col.transform.InverseTransformPoint(pos);
+                    var bombJob = new BombImageJob()
+                    {
+                        image = dest.renderer.sprite.texture.GetRawTextureData<Color32>(),
+                        bombPos = new float2(localPos.x, localPos.y),
+                        pixelsPerUnit = Constants.pixelsPerUnit,
+                        size = dest.size,
+                        bombSize = bombRadious,
+                        bombPower = bombPower
+                    };
+                    bombJob.Schedule(bombJob.image.Length, 4096).Complete();
+                    dest.renderer.sprite.texture.Apply();
+                    ProcessDestructable(dest);
+                }
             }
+            stopwatch.Stop();
+            print(stopwatch.Elapsed.TotalMilliseconds);
         }
+        //if (Input.GetMouseButtonDown(0))
+        //{
+        //    firstPos = cam.ScreenToWorldPoint(Input.mousePosition);
+        //    cutting = true;
+        //}
+        //if (cutting && Input.GetMouseButtonUp(0))
+        //{
+        //    cutting = false;
+        //    var endPos = cam.ScreenToWorldPoint(Input.mousePosition);
+        //    var dest = destructablePool.Get();
+        //    if (dest != null)
+        //    {
+        //        dest.SetTexture(Instantiate(Resources.Load("Texture") as Texture2D));
+        //        endPos = dest.transform.InverseTransformPoint(endPos);
+        //        firstPos = dest.transform.InverseTransformPoint(firstPos);
+        //        var job = new CutImageJob()
+        //        {
+        //            image = dest.renderer.sprite.texture.GetRawTextureData<Color32>(),
+        //            endPos = new float2(endPos.x, endPos.y),
+        //            startPos = new float2(firstPos.x, firstPos.y),
+        //            size = dest.size,
+        //            pixelsPerUnit = Constants.pixelsPerUnit
+        //        };
+        //        job.Schedule(job.image.Length, 64).Complete();
+        //        var texture = dest.renderer.sprite.texture;
+        //        texture.Apply();
+        //        dest.SetTexture(texture);
+        //        //print(firstPos);
+        //        //print(endPos);
+        //        destructablePool.Release(dest);
+        //    }
+        //}
 
         if (Input.GetKeyDown(KeyCode.R))
         {
@@ -72,24 +110,35 @@ public class DestructionManager : MonoBehaviour
             var stopwatch = new System.Diagnostics.Stopwatch();
             stopwatch.Start();
             var obj = destructablePool.Get();
-            print(obj);
-            print(texture);
-            obj.SetTexture(texture);
-            obj.transform.position = new Vector3(0, 3);
+
+            var job = new MakeEdgeJob()
+            {
+                image = obj.renderer.sprite.texture.GetRawTextureData<Color32>(),
+                size = obj.size,
+                pixelsPerUnit = Constants.pixelsPerUnit,
+                points = new NativeList<float2>(Allocator.TempJob),
+                points2 = new NativeList<float2>(Allocator.TempJob)
+            };
+            job.Schedule().Complete();
+            obj.SetCollision(job.points2);
+            obj.collider.enabled = true;
             stopwatch.Stop();
             print(stopwatch.Elapsed.TotalMilliseconds);
+            print(job.points2.Length);
+            job.points.Dispose();
+            job.points2.Dispose();
 
         }
     }
     void ProcessDestructable(DestructableObject dest)
     {
-        var stopwatch = new System.Diagnostics.Stopwatch();
-        stopwatch.Start();
+        //var stopwatch = new System.Diagnostics.Stopwatch();
+        //stopwatch.Start();
 
         if (destructablePool.texturePools[dest.size].Dequeue(out var texture2))
         {
             var job0 = new ClearImageJob() { image = texture2.GetRawTextureData<Color32>() };
-            job0.Schedule().Complete();
+            job0.Schedule(job0.image.Length, 4096).Complete();
             var job = new IslandImageJob()
             {
                 image = dest.renderer.sprite.texture.GetRawTextureData<Color32>(),
@@ -104,20 +153,44 @@ public class DestructionManager : MonoBehaviour
             if (job2.count[0] > Constants.minPixels)
             {
                 var dest2 = destructablePool.Get();
+                dest2.transform.position = dest.transform.position;
+                dest2.rigidbody.velocity = dest.rigidbody.velocity;
+                dest2.rigidbody.angularVelocity = dest.rigidbody.angularVelocity;
                 dest.renderer.sprite.texture.Apply();
                 dest2.SetTexture(dest.renderer.sprite.texture);
                 ProcessDestructable(dest2);
             }
             texture2.Apply();
             dest.SetTexture(texture2);
+            ProcessCollider(dest);
             job2.count.Dispose();
             job.positions.Dispose();
         }
 
 
 
+        //stopwatch.Stop();
+        //print(stopwatch.Elapsed.TotalMilliseconds);
+    }
+    void ProcessCollider(DestructableObject dest)
+    {
+        var stopwatch = new System.Diagnostics.Stopwatch();
+        stopwatch.Start();
+        var job = new MakeEdgeJob()
+        {
+            image = dest.renderer.sprite.texture.GetRawTextureData<Color32>(),
+            size = dest.size,
+            pixelsPerUnit = Constants.pixelsPerUnit,
+            points = new NativeList<float2>(Allocator.TempJob),
+            points2 = new NativeList<float2>(Allocator.TempJob)
+        };
+        job.Schedule().Complete();
+        dest.SetCollision(job.points2);
+        dest.collider.enabled = true;
         stopwatch.Stop();
-        print(stopwatch.Elapsed.TotalMilliseconds);
+        print("Collider Time: "+stopwatch.Elapsed.TotalMilliseconds);
+        job.points.Dispose();
+        job.points2.Dispose();
     }
 }
 [BurstCompile]
@@ -150,7 +223,7 @@ public struct CutImageJob : IJobParallelFor
         var distance = minimum_distance(startPos, endPos, localPos);
         var pixel = image[i];
         var random = noise.snoise(localPos);
-        if (distance < 0.1f + random*0.05f)
+        if (distance < 0.1f + random * 0.05f)
         {
             pixel.a = 0;
         }
@@ -172,6 +245,122 @@ public struct CutImageJob : IJobParallelFor
         float t = math.max(0, math.min(1, math.dot(p - v, w - v) / l2));
         float2 projection = v + t * (w - v);  // Projection falls on the segment
         return math.distance(p, projection);
+    }
+}
+[BurstCompile]
+public struct BombImageJob : IJobParallelFor
+{
+    public NativeArray<Color32> image;
+    public float2 bombPos;
+    public int size;
+    public int pixelsPerUnit;
+    public float bombPower;
+    public float bombSize;
+    public void Execute(int i)
+    {
+        int2 localPosInPixels = new int2(i % size, i / size);
+        float2 localPos = (float2)localPosInPixels / (float)pixelsPerUnit;
+        //var distance = FindDistanceToSegment(localPos, startPos,endPos, out var closest);
+        var distance = math.distance(bombPos, localPos);
+        var pixel = image[i];
+        var random = noise.snoise(localPos);
+        if (distance < bombSize)
+        {
+            pixel.a = 0;
+        }
+        else
+        {
+            //pixel.a = 255;
+        }
+        image[i] = pixel;
+    }
+}
+
+[BurstCompile]
+public struct MakeEdgeJob : IJob
+{
+    public NativeArray<Color32> image;
+    public int size;
+    public int pixelsPerUnit;
+    public NativeList<float2> points;
+    public NativeList<float2> points2;
+    int2 startPos;
+    int count;
+    public void Execute()
+    {
+        startPos = new int2(-10, 10);
+        points.Clear();
+        count = 0;
+        for (int x = 0; x < size; x++)
+        {
+            for (int y = 0; y < size; y++)
+            {
+                int2 localPos = new int2(x, y);
+                int index = x + y * size;
+                var dir = GetEdgeDirection(localPos);
+                if (!dir.Equals(new int2(0)))
+                {
+                    startPos = localPos;
+                    points.Add((float2)localPos / (float)pixelsPerUnit);
+                    count++;
+                    RecursiveWalk(localPos + dir);
+                    goto after;
+                }
+            }
+        }
+        after:
+        for (int i = 0; i < points.Length; i++)
+        {
+            var point = points[i];
+            var point2 = points[Constants.mod(i + 1, points.Length)];
+            var point0 = points[Constants.mod(i - 1, points.Length)];
+            var dot = math.dot(math.normalize(point0 - point), math.normalize(point - point2));
+            if (dot < 0.5f)
+            {
+                points2.Add(point);
+            }
+        }
+        return;
+    }
+    void RecursiveWalk(int2 position)
+    {
+        if (position.Equals(startPos))
+        {
+            return;
+        }
+        var dir = GetEdgeDirection(position);
+        points.Add((float2)position / (float)pixelsPerUnit);
+        count++;
+        RecursiveWalk(position + dir);
+    }
+    int2 GetEdgeDirection(int2 position)
+    {
+        var a0 = GetAlpha(position + Constants.edgeLookup[0]);
+        var a1 = GetAlpha(position + Constants.edgeLookup[1]);
+        var a2 = GetAlpha(position + Constants.edgeLookup[2]);
+        var a3 = GetAlpha(position + Constants.edgeLookup[3]);
+        var lookup = a0 + (a1 << 1) + (a2 << 2) + (a3 << 3);
+        var direction = Constants.edgeDirections[lookup];
+        return direction;
+    }
+    int GetAlpha(int2 position)
+    {
+        if (IsInside(position))
+        {
+            return image[position.x + position.y * size].a > 0 ? 1 : 0;
+        }
+        else
+        {
+            return 0;
+        }
+    }
+    bool IsInside(int2 position)
+    {
+        if (position.x >= 0 && position.x < size && position.y >= 0 && position.y < size)
+        {
+            return true;
+        }
+        else return false;
     }
 }
 [BurstCompile]
@@ -197,15 +386,12 @@ public struct TestJob : IJob
     }
 }
 [BurstCompile]
-public struct ClearImageJob : IJob
+public struct ClearImageJob : IJobParallelFor
 {
     public NativeArray<Color32> image;
-    public void Execute()
+    public void Execute(int index)
     {
-        for (int i = 0; i < image.Length; i++)
-        {
-            image[i] = new Color32() { a = 0 };
-        }
+        image[index] = new Color32() { a = 0 };
     }
 }
 

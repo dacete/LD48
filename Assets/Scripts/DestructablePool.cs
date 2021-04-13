@@ -45,7 +45,6 @@ public class DestructablePool : MonoBehaviour
     {
         if (freeObjects.Count == 0)
         {
-            Debug.Log("NONO");
             return SpawnNewObject();
         }
         return freeObjects.Dequeue();

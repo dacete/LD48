@@ -13,7 +13,7 @@ GameObject:
   - component: {fileID: 5524792682691519922}
   - component: {fileID: 5722902155179107103}
   - component: {fileID: 8595516443732426500}
-  m_Layer: 0
+  m_Layer: 6
   m_Name: DestructablePrefab
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -50,6 +50,9 @@ MonoBehaviour:
   rigidbody: {fileID: 8595516443732426500}
   collider: {fileID: 5722902155179107103}
   size: 1
+  texture: {fileID: 0}
+  manager: {fileID: 0}
+  loadTexture: 0
 --- !u!212 &5524792682691519922
 SpriteRenderer:
   m_ObjectHideFlags: 0
@@ -147,7 +150,7 @@ Rigidbody2D:
   m_Mass: 1
   m_LinearDrag: 0
   m_AngularDrag: 0.05
-  m_GravityScale: 0
+  m_GravityScale: 1
   m_Material: {fileID: 0}
   m_Interpolate: 0
   m_SleepingMode: 1
