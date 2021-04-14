@@ -20,4 +20,9 @@ public class ShaderTest : MonoBehaviour
         Shader.SetGlobalVector("lineDir", dir);       
         Shader.SetGlobalFloat("distanceMult", distance);       
     }
+    private void OnRenderImage(RenderTexture source, RenderTexture destination)
+    {
+        print("da");
+        Graphics.Blit(source, destination);
+    }
 }

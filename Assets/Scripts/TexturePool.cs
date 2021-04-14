@@ -13,14 +13,14 @@ public class TexturePool
     int size;
     int idleCount;
     int maxPerFrame;
-    LockFreeQueue<Texture2D> queue;
+    LockFreeQueue<UnsafeTexture> queue;
     int count;
     public TexturePool(int size, int idleCount, int maxPerFrame)
     {
         this.size = size;
         this.idleCount = idleCount;
         this.maxPerFrame = maxPerFrame;
-        queue = new LockFreeQueue<Texture2D>();
+        queue = new LockFreeQueue<UnsafeTexture>();
     }
     public void Update()
     {
@@ -32,16 +32,21 @@ public class TexturePool
             }
         }
     }
-    Texture2D NewTexture()
+    UnsafeTexture NewTexture()
     {
         var text = new Texture2D(size, size, TextureFormat.RGBA32, false);
-        return text;
+        text.filterMode = FilterMode.Point;
+        var container = new UnsafeTexture();
+        container.texture = text;
+        container.image = text.GetRawTextureData<Color32>();
+        new ClearImageJob() { image = text.GetRawTextureData<Color32>() }.Schedule(size*size, size).Complete();
+        return container;
     }
-    public void Enqueue(Texture2D texture)
+    public void Enqueue(UnsafeTexture texture)
     {
         count++;
         queue.Enqueue(texture);
-    }public bool Dequeue(out Texture2D texture)
+    }public bool Dequeue(out UnsafeTexture texture)
     {
         var bo = queue.Dequeue(out var outText);
         if (bo)
@@ -52,4 +57,9 @@ public class TexturePool
         return bo;
     }
 
+}
+public struct UnsafeTexture
+{
+    public Texture2D texture;
+    public NativeArray<Color32> image;
 }

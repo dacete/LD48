@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using Unity.Collections;
+using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine;
 
@@ -13,6 +14,7 @@ public class DestructableObject : MonoBehaviour
     public Texture2D texture;
     public DestructionManager manager;
     public bool loadTexture;
+    public JobHandle handle;
     // Start is called before the first frame update
     void Start()
     {

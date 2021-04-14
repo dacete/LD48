@@ -7,33 +7,43 @@ using UnityEngine.Pool;
 
 public class DestructablePool : MonoBehaviour
 {
-    public ObjectPool<DestructableObject> pool;
-    Queue<DestructableObject> freeObjects= new Queue<DestructableObject>();
-    public int chunkCount = 50;
-    public int extraCount = 50;
+    public LockFreeQueue<DestructableObject> objectPool= new LockFreeQueue<DestructableObject>();
+    public int objectDesiredCount = 50;
+    public int objectCount;
     public int spawnPerFrame = 1;
     bool taken;
-    NativeArray<Color32> texArray;
-    public LockFreeQueue<SpawnNewObject> spawnNewDestroyable;
     public Dictionary<int, TexturePool> texturePools;
     // Start is called before the first frame update
     void Awake()
     {
+        objectCount = 0;
         texturePools = new Dictionary<int, TexturePool>();
-        spawnNewDestroyable = new LockFreeQueue<SpawnNewObject>();
-        texArray = new NativeArray<Color32>(chunkCount, Allocator.Persistent);
-        pool = new ObjectPool<DestructableObject>(SpawnNewObject);
+        
         texturePools.Add(256, new TexturePool(256, 50, 1));
+        texturePools.Add(128, new TexturePool(128, 50, 1));
+        texturePools.Add(64, new TexturePool(64, 50, 1));
+        texturePools.Add(32, new TexturePool(32, 50, 1));
+        texturePools.Add(16, new TexturePool(16, 50, 1));
     }
-
+    public UnsafeTexture[] GetUnsafeTextureArray(int size, int count)
+    {
+        var array = new UnsafeTexture[count];
+        for (int i = 0; i < count; i++)
+        {
+            texturePools[size].Dequeue(out var texture);
+            array[i] = texture;
+        }
+        return array;
+    }
     private void Update()
     {
-        if(freeObjects.Count < chunkCount + extraCount)
+        if(objectCount < objectDesiredCount)
         {
             for (int i = 0; i < spawnPerFrame; i++)
             {
                 var dest = SpawnNewObject();
-                freeObjects.Enqueue(dest);
+                objectPool.Enqueue(dest);
+                objectCount++;
             }
         }
         foreach(int key in texturePools.Keys)
@@ -41,17 +51,19 @@ public class DestructablePool : MonoBehaviour
             texturePools[key].Update();
         }
     }
-    public DestructableObject Get()
+    public bool Get(out DestructableObject obj)
     {
-        if (freeObjects.Count == 0)
+        if (objectCount == 0)
         {
-            return SpawnNewObject();
+            obj = null;
+            return false;
         }
-        return freeObjects.Dequeue();
-    }
-    public void Release(DestructableObject dest)
-    {
-        freeObjects.Enqueue(dest);
+        else
+        {
+            var bul = objectPool.Dequeue(out obj);
+            objectCount--;
+            return bul;
+        }
     }
     DestructableObject SpawnNewObject()
     {
@@ -60,17 +72,12 @@ public class DestructablePool : MonoBehaviour
         //obj.GetComponent<DestructableObject>().SetTexture(Instantiate(Resources.Load("Texture"))as Texture2D);
         return obj.GetComponent<DestructableObject>();
     }
-
-    NativeArray<Color32> GetTextureArray()
-    {
-        return texArray;
-    }
 }
-public struct SpawnNewObject
+public struct DestructableStruct
 {
     public Vector3 position;
     public Quaternion rotation;
-    public Texture2D texture;
+    public NativeArray<Color32> image;
+    public int size;
     public Vector2[] points;
-    
 }

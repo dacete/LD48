@@ -42,4 +42,13 @@ public static class Constants
     {
         return ((x % m + m) % m);
     }
+
+    public static bool IsInside(int2 pos, int size)
+    {
+        if (pos.x >= 0 && pos.x < size && pos.y >= 0 && pos.y < size)
+        {
+            return true;
+        }
+        return false;
+    }
 }
