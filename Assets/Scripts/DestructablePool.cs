@@ -19,18 +19,21 @@ public class DestructablePool : MonoBehaviour
         objectCount = 0;
         texturePools = new Dictionary<int, TexturePool>();
         
-        texturePools.Add(256, new TexturePool(256, 50, 1));
-        texturePools.Add(128, new TexturePool(128, 50, 1));
-        texturePools.Add(64, new TexturePool(64, 50, 1));
-        texturePools.Add(32, new TexturePool(32, 50, 1));
-        texturePools.Add(16, new TexturePool(16, 50, 1));
+        texturePools.Add(256, new TexturePool(256, 150, 5));
+        texturePools.Add(128, new TexturePool(128, 150, 5));
+        texturePools.Add(64, new TexturePool(64, 150, 5));
+        texturePools.Add(32, new TexturePool(32, 150, 5));
+        texturePools.Add(16, new TexturePool(16, 150, 5));
     }
     public UnsafeTexture[] GetUnsafeTextureArray(int size, int count)
     {
         var array = new UnsafeTexture[count];
         for (int i = 0; i < count; i++)
         {
-            texturePools[size].Dequeue(out var texture);
+            if(!texturePools[size].Dequeue(out var texture))
+            {
+                print("NO");
+            }
             array[i] = texture;
         }
         return array;
@@ -64,6 +67,11 @@ public class DestructablePool : MonoBehaviour
             objectCount--;
             return bul;
         }
+    }
+    public void Release(DestructableObject obj)
+    {
+        objectCount++;
+        objectPool.Enqueue(obj);
     }
     DestructableObject SpawnNewObject()
     {

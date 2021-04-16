@@ -179,7 +179,9 @@ public unsafe class DestructionManager : MonoBehaviour
                 positions = new NativeQueue<int2>(Allocator.TempJob)
             };
             job.Schedule().Complete();
+            job.positions.Dispose();
             var count = job.islands[dest.size * dest.size];
+            print(count);
             var job2 = new IslandPostImageJob() { size = dest.size, original = job.image2, islands = job.islands, images = new NativeArray<IntPtr>(count, Allocator.Persistent) };
             var textures = destructablePool.GetUnsafeTextureArray(dest.size, count);
             for (int i = 0; i < count; i++)
@@ -187,14 +189,11 @@ public unsafe class DestructionManager : MonoBehaviour
                 job2.images[i] = new IntPtr(textures[i].image.GetUnsafePtr());
             }
             job2.Schedule(count, 1).Complete();
-            for (int i = 0; i < count; i++)
-            {
-                //var cjob = new CountPixelsJob() { image = textures[i].image, count = new NativeArray<int>(1, Allocator.TempJob) };
-                //cjob.Schedule().Complete();
-                //print(cjob.count[0]);
-                //cjob.count.Dispose();
-            }
-
+            var pos = dest.transform.position;
+            var rot = dest.transform.rotation;
+            dest.collider.enabled = false;
+            dest.renderer.enabled = false;
+            destructablePool.Release(dest);
             MakeEdgeJob[] edgeJobs = new MakeEdgeJob[count];
             JobHandle[] handles = new JobHandle[count];
             for (int i = 0; i < count; i++)
@@ -209,17 +208,23 @@ public unsafe class DestructionManager : MonoBehaviour
                 };
                 handles[i] = edgeJobs[i].Schedule();
             }
+            JobHandle.ScheduleBatchedJobs();
             for (int i = 0; i < count; i++)
             {
                 handles[i].Complete();
+            }
+            for (int i = 0; i < count; i++)
+            {
                 destructablePool.Get(out var d);
+                d.collider.enabled = true;
                 textures[i].texture.Apply();
+                d.transform.position = pos;
+                d.transform.rotation = rot;
                 d.SetTexture(textures[i].texture);
                 d.SetCollision(edgeJobs[i].points2);
                 edgeJobs[i].points.Dispose();
                 edgeJobs[i].points2.Dispose();
             }
-            job.positions.Dispose();
         }
     }
     //void ProcessDestructable(DestructableObject dest)
@@ -373,6 +378,7 @@ public struct ShatterImageJob : IJob
         var localPos = (int2)(pos * pixelsPerUnit);
         random = Unity.Mathematics.Random.CreateFromIndex(seed);
         Recursive(localPos, random.NextFloat2Direction());
+        //Recursive(localPos, random.NextFloat2Direction());
     }
     void Recursive(int2 startPos, float2 direction)
     {
@@ -381,13 +387,13 @@ public struct ShatterImageJob : IJob
             return;
         }
         count++;
-        var end = Cut(startPos, direction, pixelsPerUnit * 0.5f * random.NextFloat());
+        var end = Cut(startPos, direction, pixelsPerUnit *random.NextFloat(0.1f,0.4f));
         if (IsInside(end))
         {
-            var cnt = random.NextInt(1, 3);
+            var cnt = random.NextInt(1, 4);
             for (int i = 0; i < cnt; i++)
             {
-                Recursive(end, RotatePoint(0, 0, math.radians(random.NextFloat(-30f, 30f)), direction));
+                Recursive(end, RotatePoint(0, 0, math.radians((cnt-2)* 30f + random.NextFloat(-25f, 30f)), direction));
             }
         }
     }
@@ -437,7 +443,7 @@ public struct ShatterImageJob : IJob
             }
             if (IsInside((int2)voxel))
             {
-                image[(int)voxel.x + (int)voxel.y * size] = new Color32() { a = 0 };
+                WriteEmptyVoxel((int2)voxel);
             }
             else
             {
@@ -446,6 +452,16 @@ public struct ShatterImageJob : IJob
             // process voxel here
         }
         return (int2)voxel;
+    }
+    void WriteEmptyVoxel(int2 pos)
+    {
+        for (int x = math.max(0, pos.x - 1); x < math.min(size, pos.x + 2); x++)
+        {
+            for (int y = math.max(0, pos.y - 1); y < math.min(size, pos.y + 2); y++)
+            {
+                image[x + y * size] = new Color32() { a = 0 };
+            }
+        }
     }
     bool IsInside(int2 position)
     {
@@ -484,6 +500,8 @@ public struct MakeEdgeJob : IJob
     public NativeList<float2> points;
     public NativeList<float2> points2;
     int2 startPos;
+    int2 nextPos;
+    int2 prevPos;
     int count;
     public void Execute()
     {
@@ -502,19 +520,44 @@ public struct MakeEdgeJob : IJob
                     startPos = localPos;
                     points.Add((float2)localPos / (float)pixelsPerUnit);
                     count++;
-                    RecursiveWalk(localPos + dir);
+                    prevPos = localPos;
+                    nextPos = localPos + dir;
                     goto after;
                 }
             }
         }
         after:
-        for (int i = 0; i < points.Length; i++)
+        int counter = 0;
+        while (true)
+        {
+            if (nextPos.Equals(startPos))
+            {
+                break;
+            }
+            var dir = GetEdgeDirection(nextPos);
+            if (dir.Equals(new int2(0)))
+            {
+                Debug.LogError("Yikes");
+                return;
+            }
+            if (counter % 5 == 0)
+            {
+                points.Add((float2)nextPos / (float)pixelsPerUnit);
+            }
+            counter++;
+            count++;
+            prevPos = nextPos;
+            nextPos = nextPos + dir;
+        }
+
+
+        for (int i = 0; i < points.Length; i += 1)
         {
             var point = points[i];
             var point2 = points[Constants.mod(i + 1, points.Length)];
             var point0 = points[Constants.mod(i - 1, points.Length)];
             var dot = math.dot(math.normalize(point0 - point), math.normalize(point - point2));
-            if (dot < 0.5f)
+            if (dot < 0.95f)
             {
                 points2.Add(point);
             }
@@ -538,9 +581,37 @@ public struct MakeEdgeJob : IJob
         var a1 = GetAlpha(position + Constants.edgeLookup[1]);
         var a2 = GetAlpha(position + Constants.edgeLookup[2]);
         var a3 = GetAlpha(position + Constants.edgeLookup[3]);
-        var lookup = a0 + (a1 << 1) + (a2 << 2) + (a3 << 3);
-        var direction = Constants.edgeDirections[lookup];
-        return direction;
+        int2 direction;
+        if (a0 == 0 && a3 == 0 && a1 == 1 && a2 == 1)
+        {
+            if (position.Equals(prevPos))
+            {
+                Debug.LogError("NO");
+                return new int2();
+            }
+            var delta = position - prevPos;
+            direction.y = -delta.x;
+            direction.x = -delta.y;
+            return direction;
+        }
+        else if (a0 == 1 && a3 == 1 && a1 == 0 && a2 == 0)
+        {
+            if (position.Equals(prevPos))
+            {
+                Debug.LogError("NO");
+                return new int2();
+            }
+            var delta = position - prevPos;
+            direction.y = delta.x;
+            direction.x = delta.y;
+            return direction;
+        }
+        else
+        {
+            var lookup = a0 + (a1 << 1) + (a2 << 2) + (a3 << 3);
+            direction = Constants.edgeDirections[lookup];
+            return direction;
+        }
     }
     int GetAlpha(int2 position)
     {
@@ -659,6 +730,7 @@ public struct IslandPrepImageJob : IJob
     public NativeArray<byte> islands;
     public int size;
     byte counter;
+    int islandSizeCounter;
     public NativeQueue<int2> positions;
     public void Execute()
     {
@@ -680,6 +752,7 @@ public struct IslandPrepImageJob : IJob
     }
     void CalculateIsland(int2 position)
     {
+        islandSizeCounter = 0;
         Enqueue(position);
         while (positions.Count > 0)
         {
@@ -699,10 +772,35 @@ public struct IslandPrepImageJob : IJob
                 }
             }
         }
+        if (islandSizeCounter < 20)
+        {
+            DeleteIsland(position);
+        }
         counter++;
+    }
+    void DeleteIsland(int2 position)
+    {
+        Enqueue(position);
+        while (positions.Count > 0)
+        {
+            var pos = positions.Dequeue();
+            var index = GetIndex(pos);
+            var pixel = image[index];
+            if (pixel.a > 0)
+            {
+                pixel.a = 0;
+                image2[index] = pixel;
+                islands[index] = 0;
+                for (int p = 0; p < Constants.nLookup.Length; p++)
+                {
+                    Enqueue(pos + Constants.nLookup[p]);
+                }
+            }
+        }
     }
     void Enqueue(int2 position)
     {
+        islandSizeCounter++;
         if (IsInside(position))
         {
             positions.Enqueue(position);
