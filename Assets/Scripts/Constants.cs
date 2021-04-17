@@ -5,6 +5,11 @@ using UnityEngine;
 
 public static class Constants
 {
+    public static readonly int chunkWidth = 32;
+    public static readonly int cubedChunkSize = chunkWidth*chunkWidth*chunkWidth;
+
+    public static readonly int textureWidth = 16;
+    public static readonly float textureAtlasBlockWidth = 1f/textureWidth;
     public static int pixelsPerUnit = 64;
     public static int minPixels = 15;
     public static readonly int2[] nLookup = new int2[4]
