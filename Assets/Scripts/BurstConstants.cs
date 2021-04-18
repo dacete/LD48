@@ -120,6 +120,9 @@ public static class BurstConstants
             new VertexAttributeDescriptor(VertexAttribute.Position, VertexAttributeFormat.UNorm16, 4, stream:0),
             new VertexAttributeDescriptor(VertexAttribute.Normal, VertexAttributeFormat.SNorm8, 4, stream:1),
         };
+    public static readonly VertexAttributeDescriptor[] highlightMeshLayout = {
+            new VertexAttributeDescriptor(VertexAttribute.Position, VertexAttributeFormat.Float32, 4, stream:0),
+        };
     #endregion
 
 

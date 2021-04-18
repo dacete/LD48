@@ -6,6 +6,7 @@ using UnityEngine;
 public static class Constants
 {
     public static readonly int chunkWidth = 32;
+    public static readonly float voxelSize = 0.125f;
     public static readonly int cubedChunkSize = chunkWidth*chunkWidth*chunkWidth;
 
     public static readonly int textureWidth = 16;

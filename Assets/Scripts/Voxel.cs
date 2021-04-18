@@ -19,7 +19,7 @@ public unsafe class Voxel : MonoBehaviour
     public MeshRenderer meshRenderer;
     public MeshFilter meshFilter;
     NativeArray<byte> voxels;
-    public VoxelObject obj;
+    public OldVoxelObject obj;
     NativeChunkMeshData meshData;
     Mesh mesh;
     // Start is called before the first frame update

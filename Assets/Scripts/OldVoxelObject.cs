@@ -4,10 +4,8 @@ using Unity.Collections;
 using Unity.Mathematics;
 using UnityEngine;
 
-public class VoxelObject : MonoBehaviour
+public class OldVoxelObject : MonoBehaviour
 {
-    public Vector3 speed;
-    public float offset, mult, speed2;
     public Line[] lines;
     public NativeArray<Line> nLines;
     // Start is called before the first frame update
@@ -24,7 +22,5 @@ public class VoxelObject : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
-        transform.Rotate(speed*Time.deltaTime);
-        transform.localScale = new float3(mult*Mathf.Sin(Time.realtimeSinceStartup * speed2) + offset);
     }
 }

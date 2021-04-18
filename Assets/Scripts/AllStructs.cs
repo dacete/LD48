@@ -149,7 +149,7 @@ public struct LineJob : IJobParallelFor
     public void Execute(int i)
     {
         var line = lines[i];
-        Traverse(TransformExtensions.TransformPointUnscaled(position, rotation, scale*line.start),
+        Traverse(TransformExtensions.TransformPointUnscaled(position, rotation, scale * line.start),
             TransformExtensions.TransformPointUnscaled(position, rotation, scale * line.end),
             line.id);
     }
@@ -246,7 +246,32 @@ public struct Line
     public float3 start, end;
     public byte id;
 }
+public struct NativeHighlightMeshData
+{
+    public NativeList<float4> posVertices;
+    public NativeList<int> Indices;
+    public NativeArray<int> vertexCount;
+    public void Initialize()
+    {
+        posVertices = new NativeList<float4>(Allocator.Persistent);
+        Indices = new NativeList<int>(Allocator.Persistent);
+        vertexCount = new NativeArray<int>(1, Allocator.Persistent);
+    }
 
+    public void Dispose()
+    {
+        if (posVertices.IsCreated) posVertices.Dispose();
+        if (Indices.IsCreated) Indices.Dispose();
+        if (vertexCount.IsCreated) vertexCount.Dispose();
+    }
+
+    public void Clear()
+    {
+        posVertices.Clear();
+        Indices.Clear();
+        vertexCount[0] = 0;
+    }
+}
 public struct NativeChunkMeshData
 {
     public NativeList<PositionVertex> posVertices;
@@ -299,6 +324,13 @@ public struct PositionVertex
         x = (UInt16)(pos.x / BurstConstants.chunkWidth * UInt16.MaxValue);
         y = (UInt16)(math.clamp(pos.y, 0, BurstConstants.chunkHeight) / BurstConstants.chunkHeight * UInt16.MaxValue);
         z = (UInt16)(pos.z / BurstConstants.chunkWidth * UInt16.MaxValue);
+        w = (UInt16)_w;
+    }
+    public PositionVertex(float3 pos, float size, int _w = 0)
+    {
+        x = (UInt16)(pos.x / size * UInt16.MaxValue);
+        y = (UInt16)(pos.y / size * UInt16.MaxValue);
+        z = (UInt16)(pos.z / size * UInt16.MaxValue);
         w = (UInt16)_w;
     }
 }
